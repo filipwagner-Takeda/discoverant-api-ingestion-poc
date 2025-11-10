@@ -1,0 +1,28 @@
+{
+  "ingest-souce-config": {
+    "app-name": "RickAndMortyIngest",
+    "base-url": "http://discoverant-dev.onetakeda.com:18080/discoverant-ws/agdata/agcdata",
+    "history-load": {
+      "enabled": false,
+      "start_date": "2020-01-01"
+    },
+    "endpoint":
+      {
+        "endpoint-name": "agmanifest",
+        "params": {
+
+        },
+        "headers": {
+          "Accept": "application/json"
+        }
+
+      }
+  },
+  "notifications": {
+    "service-now": {
+      "base-url": "https://your-instance.service-now.com",
+      "username": "api_user",
+      "password": "supersecret"
+    }
+  }
+}
