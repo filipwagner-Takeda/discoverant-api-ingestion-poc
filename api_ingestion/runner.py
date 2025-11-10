@@ -1,8 +1,8 @@
 from typing import Any
 
 from api_ingestion.connector_wrapper import fetch_from_rest
-from connector import MyRestDataSource
-from config_loader import ConfigLoader
+from api_ingestion.connector import MyRestDataSource
+from api_ingestion.config_loader import ConfigLoader
 from datetime import datetime, timedelta
 class Runner:
     def __init__(self,spark:Any, config_path:str):
@@ -19,6 +19,12 @@ class Runner:
             fetch_from_rest(self.spark,self.app_context).show()
 
     def _generate_history_load(self,start_dt: str,windowing_days: int):
+        """
+        method to generate history load dates
+        :param start_dt:
+        :param windowing_days:
+        :return:
+        """
         start_dt = datetime.strptime(start_dt, "%Y-%m-%d")
         end_dt = datetime.now()
         while start_dt <= end_dt:
