@@ -27,6 +27,7 @@ class AppContext:
     url: str
     history_load: HistoryLoadConfig
     endpoint: Endpoint
+    json_path: Optional[str] = None
 
 
 @dataclass

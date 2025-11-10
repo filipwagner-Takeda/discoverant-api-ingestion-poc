@@ -15,8 +15,10 @@
         "headers": {
           "Accept": "application/json"
         }
-
-      }
+      },
+    "result": {
+      "json_path": "results"
+    }
   },
   "notifications": {
     "service-now": {

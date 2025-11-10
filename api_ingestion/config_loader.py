@@ -38,15 +38,15 @@ class ConfigLoader:
     def load_app_context(self) -> AppContext:
         with open(self.path, "r") as f:
             cfg = json.load(f)["ingest-souce-config"]
-            cfg.get("endpoint")
         endpoint = Endpoint(
                 endpoint_name=cfg.get("endpoint").get("endpoint-name"),
                 params=cfg.get("endpoint").get("params"),
                 headers=cfg.get("endpoint").get("headers"))
 
         return AppContext(
-            app_name=cfg["app-name"],
-            url=cfg["base-url"],
+            app_name=cfg.get("app-name"),
+            url=cfg.get("base-url"),
             history_load=HistoryLoadConfig(**cfg["history-load"]),
-            endpoint=endpoint
+            endpoint=endpoint,
+            json_path=cfg.get("result").get("json_path")
         )

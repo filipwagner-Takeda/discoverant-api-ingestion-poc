@@ -10,7 +10,7 @@ def fetch_from_rest(spark:Any,configuration:AppContext) -> DataFrame:
           .format("custom-discoverant-connector")
           .option("base_url", configuration.url)
           .option("endpoint", configuration.endpoint.endpoint_name)
-          .option("json_path", "aglist")
+          .option("json_path", configuration.json_path)
           .option("username", constants.USERNAME)
           .option("password", constants.PASSWORD)
           .option("throttle", constants.THROTTLE)
