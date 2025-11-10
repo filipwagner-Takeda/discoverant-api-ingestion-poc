@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 class MyRestDataSource(DataSource):
+    """
+    DataSource class used for reading
+    name: format which is set up when reading data
+    schema: returns schema used in read method(DataSourceReader)
+    reader: returns the datasource reader implementation
+    """
     @classmethod
     def name(cls):
         return "custom-discoverant-connector"
