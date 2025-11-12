@@ -1,6 +1,6 @@
 from typing import Any
 
-import constants
+import api_ingestion.constants as constants
 from api_ingestion.app_context import AppContext
 from pyspark.sql import DataFrame
 
