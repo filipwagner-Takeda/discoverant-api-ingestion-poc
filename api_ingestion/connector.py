@@ -8,7 +8,7 @@ from pyspark.sql.types import (
     StringType
 )
 from typing import Iterator
-from json_utils import JsonUtils
+from api_ingestion.json_utils import JsonUtils
 
 class MyRestDataSource(DataSource):
     """
