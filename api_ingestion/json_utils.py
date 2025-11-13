@@ -6,28 +6,28 @@ from pyspark.sql.types import (
 )
 import json
 
+
 class JsonUtils:
     """
     Stateless utility class for flattening JSON, extracting nested values,
     inferring Spark types, and converting values to Spark-compatible types.
-    Basically infer schema on initial load in connector
+    Basically infer schema on initial load in connector.
+    Also supporting manual schema entry and load from json
     """
 
     @staticmethod
-    def flatten_json(nested: Any, parent_key: str = "", sep: str = ".") -> Dict[str, Any]:
+    def flatten_json(nested, parent_key="", sep="."):
         """
-        Recursively flattens a nested JSON-like structure (dict or list) into a single-level dict.
-        Example:
-            {"a": {"b": 123, "c": 456}} -> {"a.b": 123, "a.c": 456}
-        Lists are converted to JSON strings.
+        Basic recursive flatten of a JSON object (dict) into a one-level dict.
+        E.g. {"a": {"b": 123, "c": 456}} -> {"a.b": 123, "a.c": 456}
+        Arrays (lists) remain as raw JSON strings.
         """
         items = []
-
         if isinstance(nested, dict):
             for k, v in nested.items():
                 new_key = f"{parent_key}{sep}{k}" if parent_key else k
                 if isinstance(v, dict):
-                    items.extend(JsonUtils.flatten_json(v, new_key, sep).items())
+                    items.extend(JsonUtils.flatten_json(v, new_key, sep=sep).items())
                 elif isinstance(v, list):
                     items.append((new_key, json.dumps(v)))
                 else:
@@ -36,20 +36,16 @@ class JsonUtils:
             items.append((parent_key, json.dumps(nested)))
         else:
             items.append((parent_key, nested))
-
         return dict(items)
 
     @staticmethod
-    def get_nested_value(data: Dict[str, Any], json_path: str) -> Optional[Any]:
+    def get_nested_value(data, json_path):
         """
-        Extracts a nested value from a dict using a dot-separated path.
-        Example:
-            data = {"a": {"b": 123}}, json_path = "a.b" -> 123
-        Returns None if any level is missing.
+        Extracts a nested value from data following a path like "data.items".
+        If any level is missing, returns None.
         """
         if not json_path:
             return data
-
         keys = json_path.split(".")
         for key in keys:
             if not isinstance(data, dict):
@@ -60,9 +56,11 @@ class JsonUtils:
         return data
 
     @staticmethod
-    def infer_spark_type(value: Any) -> DataType:
+    def infer_spark_type(value):
         """
-        Infer Spark DataType from a Python value.
+        Infer Spark DataType from a given Python value.
+        For strings, we try to detect an ISO-formatted datetime.
+        For lists or dicts, we fallback to StringType since these are flattened to JSON strings.
         """
         if value is None:
             return StringType()
@@ -74,6 +72,7 @@ class JsonUtils:
             return DoubleType()
         if isinstance(value, str):
             try:
+                # Attempt to parse ISO formatted datetime
                 datetime.datetime.fromisoformat(value)
                 return TimestampType()
             except ValueError:
@@ -81,33 +80,48 @@ class JsonUtils:
         return StringType()
 
     @staticmethod
-    def convert_value_to_type(value: Any, spark_type: DataType) -> Optional[Any]:
+    def convert_value_to_type(value, spark_type):
         """
-        Converts a value to a Python type compatible with the given Spark DataType.
-        Returns None if conversion fails.
+        Convert a value to the corresponding Python type matching the Spark DataType.
         """
         if value is None:
             return None
 
-        try:
-            if isinstance(spark_type, LongType):
+        if isinstance(spark_type, LongType):
+            try:
                 return int(value)
-            if isinstance(spark_type, DoubleType):
+            except Exception:
+                return None
+
+        if isinstance(spark_type, DoubleType):
+            try:
                 return float(value)
-            if isinstance(spark_type, BooleanType):
+            except Exception:
+                return None
+
+        if isinstance(spark_type, BooleanType):
+            try:
                 if isinstance(value, bool):
                     return value
-                return str(value).lower() in ["true", "1", "yes", "t"]
-            if isinstance(spark_type, TimestampType):
+                value_lower = str(value).lower()
+                return value_lower in ["true", "1", "yes", "t"]
+            except Exception:
+                return None
+
+        if isinstance(spark_type, TimestampType):
+            try:
                 if isinstance(value, str):
                     return datetime.datetime.fromisoformat(value)
-                if isinstance(value, datetime.datetime):
+                elif isinstance(value, datetime.datetime):
                     return value
+                else:
+                    return None
+            except Exception:
                 return None
-        except Exception:
-            return None
 
-        # Fallback: convert to string
+        # Fallback to string conversion
+        return str(value)
+
     @staticmethod
     def load_spark_schema_from_json(json_schema_path: str) -> StructType:
         """

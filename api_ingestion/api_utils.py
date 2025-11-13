@@ -12,7 +12,6 @@ def find_valid_pages(base_url, start_page, end_page, page_param="page", headers=
         if s > e:
             return
 
-        # Check the first page in the range
         params = {page_param: s}
         resp = requests.get(base_url, params=params, headers=headers, auth=auth, timeout=10)
 
@@ -26,7 +25,8 @@ def find_valid_pages(base_url, start_page, end_page, page_param="page", headers=
         if s == e:
             valid_pages.append(s)
             return
-
+        # split in the middle first to check for smaller range recursively
+        #if max is 10 we go (1,4) and then the rest (5..10) until we get 404/no data
         mid = (s + e) // 2
         check_range(s, mid)
         check_range(mid + 1, e)

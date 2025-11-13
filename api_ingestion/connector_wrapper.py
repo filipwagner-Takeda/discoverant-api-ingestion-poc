@@ -7,9 +7,10 @@ from pyspark.sql import DataFrame
 
 def fetch_from_rest(spark:Any,configuration:AppContext) -> DataFrame:
     reader = (spark.read
-          .format("custom-discoverant-connector")
+          .format("api-ingestion")
           .option("base_url", configuration.url)
           .option("endpoint", configuration.endpoint.endpoint_name)
+          .option("pagination","true")
           .option("json_path", configuration.json_path)
           .option("username", constants.USERNAME)
           .option("password", constants.PASSWORD)

@@ -2,14 +2,19 @@ import requests
 import json
 import datetime
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+import api_ingestion.api_utils as api_utils
 from pyspark.sql.types import (
     StructType,
     StructField,
-    StringType
+    StringType,
+    LongType,
+    DoubleType,
+    BooleanType,
+    TimestampType,
 )
-import api_ingestion.api_utils as api_utils
 from typing import Iterator
 from api_ingestion.json_utils import JsonUtils
+
 
 class MyRestDataSource(DataSource):
     """
@@ -30,7 +35,7 @@ class MyRestDataSource(DataSource):
     @classmethod
     def name(cls):
         # Name used in spark.read.format("myrestdatasource")
-        return "api-datasource"
+        return "api-ingestion"
 
     def schema(self):
         """
@@ -111,6 +116,7 @@ class MyRestDataSourceReader(DataSourceReader):
         We loop to handle pagination, retrieving and flattening each JSON object
         based on the inferred schema and converting each value to its proper type.
         """
+        start_page, end_page = partition.value
         base_url = self.options.get("base_url", "")
         endpoint = self.options.get("endpoint", "")
         url = f"{base_url}/{endpoint}".rstrip("/")
@@ -119,63 +125,55 @@ class MyRestDataSourceReader(DataSourceReader):
         pagination = self.options.get("pagination", "false").lower() == "true"
         page_param = self.options.get("page_param", "page")
         start_page = int(self.options.get("start_page", 1))
-        max_pages = int(self.options.get("max_pages", 10))
         json_path = self.options.get("json_path")
+        max_pages = self.options.get("max_pages")
+        # if not max_pages:
+        #    max_pages = api_utils.find_valid_pages(url,1,100,headers={"Accept": "application/json"})
 
         # Retrieve column names and their corresponding Spark types from the schema
         col_details = [(field.name, field.dataType) for field in self.schema.fields]
 
         page = start_page
 
-        # Use a requests.Session for connection reuse and improved performance
-
-        start_page, end_page = partition.value  # Unpack the tuple
-
         with requests.Session() as session:
             if auth_token:
                 session.headers.update({"Authorization": auth_token})
+
             for page_num in range(start_page, end_page + 1):
-                while True:
-                    params = {}
-                    if pagination:
-                        params[page_param] = page_num
+                params = {}
+                if pagination:
+                    params[page_param] = page_num
 
-                    resp = session.get(url, headers={}, params=params, timeout=10)
-                    resp.raise_for_status()
-                    data = resp.json()
+                resp = session.get(url, headers={}, params=params, timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
 
-                    data = JsonUtils.get_nested_value(data, json_path)
-                    if data is None:
-                        break
+                data = JsonUtils.get_nested_value(data, json_path)
+                if data is None:
+                    break
 
+                # Normalize to a list if data is a dict
+                if isinstance(data, dict):
+                    data = [data]
+                if not isinstance(data, list) or len(data) == 0:
+                    break
 
-                    if isinstance(data, dict):
-                        data = [data]
-                    if not isinstance(data, list) or len(data) == 0:
-                        break
+                for elem in data:
+                    flattened = JsonUtils.flatten_json(elem)
+                    row = []
 
-                    for elem in data:
-
-                        flattened = JsonUtils.flatten_json(elem)
-                        row = []
-
-                        for col, spark_type in col_details:
-                            val = flattened.get(col)
-                            converted_val = JsonUtils.convert_value_to_type(val, spark_type)
-                            row.append(converted_val)
-                        yield tuple(row)
-
-                    # Exit the loop if pagination is not enabled
-                    if not pagination:
-                        break
-
-                    if page >= max_pages:
-                        break
-                    page += 1
+                    for col, spark_type in col_details:
+                        val = flattened.get(col)
+                        converted_val = JsonUtils.convert_value_to_type(val, spark_type)
+                        row.append(converted_val)
+                    yield tuple(row)
 
     def partitions(self):
-        url_with_endpoint = f"{self.options.get('base_url', '')}/{self.options.get('endpoint', '')}"
-        max_number = api_utils.find_valid_pages(url_with_endpoint,1,50,page_param="page")
+        # Return a single partition since this example handles one partition only.
+        base_url = self.options.get("base_url", "")
+        endpoint = self.options.get("endpoint", "")
+        url = f"{base_url}/{endpoint}".rstrip("/")
+        max_number = api_utils.find_valid_pages(url, 1, 50, page_param="page")
         chunk_size = 10
         partitions = []
         for start in range(1, max_number + 1, chunk_size):
@@ -183,5 +181,4 @@ class MyRestDataSourceReader(DataSourceReader):
             partitions.append(InputPartition((start, end)))
 
         return partitions
-
-        #return [InputPartition(0)]
+        # return [InputPartition(0)]
