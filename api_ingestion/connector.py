@@ -7,6 +7,7 @@ from pyspark.sql.types import (
     StructField,
     StringType
 )
+import api_ingestion.api_utils as api_utils
 from typing import Iterator
 from api_ingestion.json_utils import JsonUtils
 
@@ -127,48 +128,60 @@ class MyRestDataSourceReader(DataSourceReader):
         page = start_page
 
         # Use a requests.Session for connection reuse and improved performance
+
+        start_page, end_page = partition.value  # Unpack the tuple
+
         with requests.Session() as session:
             if auth_token:
                 session.headers.update({"Authorization": auth_token})
+            for page_num in range(start_page, end_page + 1):
+                while True:
+                    params = {}
+                    if pagination:
+                        params[page_param] = page_num
 
-            while True:
-                params = {}
-                if pagination:
-                    params[page_param] = page
+                    resp = session.get(url, headers={}, params=params, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
 
-                resp = session.get(url, headers={}, params=params, timeout=10)
-                resp.raise_for_status()
-                data = resp.json()
-
-                data = JsonUtils.get_nested_value(data, json_path)
-                if data is None:
-                    break
+                    data = JsonUtils.get_nested_value(data, json_path)
+                    if data is None:
+                        break
 
 
-                if isinstance(data, dict):
-                    data = [data]
-                if not isinstance(data, list) or len(data) == 0:
-                    break
+                    if isinstance(data, dict):
+                        data = [data]
+                    if not isinstance(data, list) or len(data) == 0:
+                        break
 
-                for elem in data:
+                    for elem in data:
 
-                    flattened = JsonUtils.flatten_json(elem)
-                    row = []
+                        flattened = JsonUtils.flatten_json(elem)
+                        row = []
 
-                    for col, spark_type in col_details:
-                        val = flattened.get(col)
-                        converted_val = JsonUtils.convert_value_to_type(val, spark_type)
-                        row.append(converted_val)
-                    yield tuple(row)
+                        for col, spark_type in col_details:
+                            val = flattened.get(col)
+                            converted_val = JsonUtils.convert_value_to_type(val, spark_type)
+                            row.append(converted_val)
+                        yield tuple(row)
 
-                # Exit the loop if pagination is not enabled
-                if not pagination:
-                    break
+                    # Exit the loop if pagination is not enabled
+                    if not pagination:
+                        break
 
-                if page >= max_pages:
-                    break
-                page += 1
+                    if page >= max_pages:
+                        break
+                    page += 1
 
     def partitions(self):
-        # Return a single partition since this example handles one partition only.
-        return [InputPartition(0)]
+        url_with_endpoint = f"{self.options.get('base_url', '')}/{self.options.get('endpoint', '')}"
+        max_number = api_utils.find_valid_pages(url_with_endpoint,1,50,page_param="page")
+        chunk_size = 10
+        partitions = []
+        for start in range(1, max_number + 1, chunk_size):
+            end = min(start + chunk_size - 1, max_number)
+            partitions.append(InputPartition((start, end)))
+
+        return partitions
+
+        #return [InputPartition(0)]

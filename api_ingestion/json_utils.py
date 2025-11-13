@@ -2,9 +2,9 @@ import json
 import datetime
 from typing import Any, Dict, Optional
 from pyspark.sql.types import (
-    StringType, BooleanType, LongType, DoubleType, TimestampType, DataType
+    StructType,StructField, StringType, BooleanType, LongType, DoubleType, TimestampType, DataType
 )
-
+import json
 
 class JsonUtils:
     """
@@ -108,3 +108,28 @@ class JsonUtils:
             return None
 
         # Fallback: convert to string
+    @staticmethod
+    def load_spark_schema_from_json(json_schema_path: str) -> StructType:
+        """
+        Loads a JSON schema file and converts it into a Spark StructType.
+
+        :param json_schema_path: Path to the JSON schema file
+        :return: Spark StructType
+        """
+        with open(json_schema_path, "r") as f:
+            schema_dict = json.load(f)
+
+        type_mapping = {
+            "string": StringType(),
+            "long": LongType(),
+            "double": DoubleType(),
+            "boolean": BooleanType(),
+            "timestamp": TimestampType()
+        }
+
+        fields = []
+        for field in schema_dict.get("fields", []):
+            spark_type = type_mapping.get(field["type"].lower(), StringType())
+            fields.append(StructField(field["name"], spark_type, field.get("nullable", True)))
+
+        return StructType(fields)
