@@ -12,7 +12,7 @@ from pyspark.sql.types import (
     BooleanType,
     TimestampType,
 )
-from typing import Iterator
+from typing import Iterator, List
 from api_ingestion.json_utils import JsonUtils
 
 
@@ -112,9 +112,7 @@ class MyRestDataSourceReader(DataSourceReader):
 
     def read(self, partition) -> Iterator[tuple]:
         """
-        Spark calls this on each partition (in this case, only one partition).
-        We loop to handle pagination, retrieving and flattening each JSON object
-        based on the inferred schema and converting each value to its proper type.
+        Spark calls this on each partition.
         """
         start_page, end_page = partition.value
         base_url = self.options.get("base_url", "")
@@ -122,53 +120,64 @@ class MyRestDataSourceReader(DataSourceReader):
         url = f"{base_url}/{endpoint}".rstrip("/")
 
         auth_token = self.options.get("auth_token")
-        pagination = self.options.get("pagination", "false").lower() == "true"
-        page_param = self.options.get("page_param", "page")
-        start_page = int(self.options.get("start_page", 1))
         json_path = self.options.get("json_path")
-        max_pages = self.options.get("max_pages")
-        # if not max_pages:
-        #    max_pages = api_utils.find_valid_pages(url,1,100,headers={"Accept": "application/json"})
+        page_param = self.options.get("page_param", "page")
 
         # Retrieve column names and their corresponding Spark types from the schema
         col_details = [(field.name, field.dataType) for field in self.schema.fields]
-
-        page = start_page
 
         with requests.Session() as session:
             if auth_token:
                 session.headers.update({"Authorization": auth_token})
 
             for page_num in range(start_page, end_page + 1):
-                params = {}
-                if pagination:
-                    params[page_param] = page_num
+                for row in self._fetch_page_data(session, url, page_num, page_param, json_path, col_details):
+                    yield row
 
-                resp = session.get(url, headers={}, params=params, timeout=10)
-                resp.raise_for_status()
-                data = resp.json()
+    def _fetch_page_data(self,session, url, page_num, page_param, json_path, col_details):
+        """
+        Fetch and process data for a single page.
 
-                data = JsonUtils.get_nested_value(data, json_path)
-                if data is None:
-                    break
+        :param session: requests.Session object with headers already set
+        :param url: API endpoint
+        :param page_num: Current page number
+        :param page_param: Name of the pagination parameter
+        :param pagination: Boolean indicating if pagination is enabled
+        :param json_path: Path to extract data from JSON response
+        :param col_details: List of (column_name, spark_type) tuples
+        :return: Generator yielding tuples of processed rows
+        """
+        params = {page_param: page_num}
 
-                # Normalize to a list if data is a dict
-                if isinstance(data, dict):
-                    data = [data]
-                if not isinstance(data, list) or len(data) == 0:
-                    break
+        resp = session.get(url, headers={}, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
 
-                for elem in data:
-                    flattened = JsonUtils.flatten_json(elem)
-                    row = []
+        data = JsonUtils.get_nested_value(data, json_path)
+        if data is None:
+            return  # No data for this page
 
-                    for col, spark_type in col_details:
-                        val = flattened.get(col)
-                        converted_val = JsonUtils.convert_value_to_type(val, spark_type)
-                        row.append(converted_val)
-                    yield tuple(row)
+        # Normalize to list
+        if isinstance(data, dict):
+            data = [data]
+        if not isinstance(data, list) or len(data) == 0:
+            return
 
-    def partitions(self):
+        for elem in data:
+            flattened = JsonUtils.flatten_json(elem)
+            row = []
+            for col, spark_type in col_details:
+                val = flattened.get(col)
+                converted_val = JsonUtils.convert_value_to_type(val, spark_type)
+                row.append(converted_val)
+            yield tuple(row)
+
+    def partitions(self) -> List[InputPartition]:
+        """
+        Method used to partition data to send to executors
+        pagination enabled -> split pages to chunks
+        :return: List of input partitions for executors
+        """
         # Return a single partition since this example handles one partition only.
         base_url = self.options.get("base_url", "")
         endpoint = self.options.get("endpoint", "")

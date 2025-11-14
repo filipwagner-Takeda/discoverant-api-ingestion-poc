@@ -6,13 +6,12 @@ from typing import Optional, List, Dict
 class AuthConfig:
     username: Optional[str] = None
     password: Optional[str] = None
-
+    token: Optional[str] = None
 
 @dataclass
-class HistoryLoadConfig:
-    enabled: bool
-    start_date: Optional[str] = None
-
+class Pagination:
+    enabled: Optional[bool] = False
+    max_pages: Optional[int] = None
 
 @dataclass
 class Endpoint:
@@ -25,8 +24,8 @@ class Endpoint:
 class AppContext:
     app_name: str
     url: str
-    history_load: HistoryLoadConfig
     endpoint: Endpoint
+    pages: Optional[Pagination] = None
     json_path: Optional[str] = None
 
 

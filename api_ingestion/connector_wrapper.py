@@ -15,6 +15,7 @@ def fetch_from_rest(spark:Any,configuration:AppContext) -> DataFrame:
           .option("username", constants.USERNAME)
           .option("password", constants.PASSWORD)
           .option("throttle", constants.THROTTLE)
+          .option("max_pages",configuration.pages.max_pages)
           .option("retries", constants.RETRIES)
           )
 

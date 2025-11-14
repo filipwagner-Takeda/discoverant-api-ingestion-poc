@@ -1,11 +1,7 @@
 {
   "ingest-souce-config": {
     "app-name": "RickAndMortyIngest",
-    "base-url": "http://discoverant-dev.onetakeda.com:18080/discoverant-ws/agdata/agcdata",
-    "history-load": {
-      "enabled": false,
-      "start_date": "2020-01-01"
-    },
+    "base-url": "http://discoverant-dev.onetakeda.com:18080/discoverant-ws/agdata",
     "endpoint":
       {
         "endpoint-name": "agmanifest",
@@ -14,17 +10,15 @@
         },
         "headers": {
           "Accept": "application/json"
-        }
+        },
+        "pagination":{
+          "enabled": "true",
+          "max_pages": 100
+      }
       },
+    "partition-strategy": "page",
     "result": {
       "json_path": "results"
-    }
-  },
-  "notifications": {
-    "service-now": {
-      "base-url": "https://your-instance.service-now.com",
-      "username": "api_user",
-      "password": "supersecret"
     }
   }
 }
