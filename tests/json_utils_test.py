@@ -1,6 +1,9 @@
 import pytest
 import datetime
-from pyspark.sql.types import StringType, BooleanType, LongType, DoubleType, TimestampType
+import json
+import tempfile
+import pytest
+from pyspark.sql.types import StructType, StructField, StringType, LongType, DoubleType, BooleanType, TimestampType
 from api_ingestion.json_utils import JsonUtils
 
 class TestJsonUtils:
@@ -64,3 +67,52 @@ class TestJsonUtils:
 
     def test_convert_value_to_type_invalid(self):
         assert JsonUtils.convert_value_to_type("abc", LongType()) is None
+
+    @pytest.fixture
+    def create_json_file(self):
+        def _create_json_file(content: dict):
+            tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+            with open(tmp_file.name, "w") as f:
+                json.dump(content, f)
+            return tmp_file.name
+        return _create_json_file
+
+    def test_valid_schema(self,create_json_file):
+        schema_content = {
+            "fields": [
+                {"name": "id", "type": "long", "nullable": False},
+                {"name": "name", "type": "string", "nullable": True},
+                {"name": "price", "type": "double"}
+            ]
+        }
+        json_path = create_json_file(schema_content)
+        schema = JsonUtils.load_spark_schema_from_json(json_path)
+
+        expected = StructType([
+            StructField("id", LongType(), False),
+            StructField("name", StringType(), True),
+            StructField("price", DoubleType(), True)
+        ])
+        assert schema == expected
+
+    def test_missing_fields_key(self,create_json_file):
+        schema_content = {}
+        json_path = create_json_file(schema_content)
+        schema = JsonUtils.load_spark_schema_from_json(json_path)
+        assert schema == StructType([])
+
+    def test_unknown_type_defaults_to_string(self,create_json_file):
+        schema_content = {
+            "fields": [{"name": "unknown_field", "type": "unknown"}]
+        }
+        json_path = create_json_file(schema_content)
+        schema = JsonUtils.load_spark_schema_from_json(json_path)
+        assert schema.fields[0].dataType == StringType()
+
+    def test_nullable_flag(self,create_json_file):
+        schema_content = {
+            "fields": [{"name": "flag", "type": "boolean", "nullable": False}]
+        }
+        json_path = create_json_file(schema_content)
+        schema = JsonUtils.load_spark_schema_from_json(json_path)
+        assert schema.fields[0].nullable is False
