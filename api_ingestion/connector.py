@@ -61,13 +61,11 @@ class MyRestDataSource(DataSource):
         """
         url = f"{base_url}/{endpoint}".rstrip("/")
         params = {page_param: start_page} if pagination else {}
-        headers = {
-            "Accept": "application/json"
-        }
         with requests.Session() as session:
             if auth_token:
                 session.headers.update({"Authorization": auth_token})
-            resp = session.get(url, headers=headers, params=params, timeout=10)
+            session.headers.update({"Content-Type": "application/json"})
+            resp = session.get(url, params=params, timeout=10)
             resp.raise_for_status()
             data = resp.json()
 
@@ -160,6 +158,7 @@ class MyRestDataSourceReader(DataSourceReader):
         with requests.Session() as session:
             if auth_token:
                 session.headers.update({"Authorization": auth_token})
+            session.headers.update({"Content-Type": "application/json"})
             strategy = self.options.get("partitioning_strategy", "")
             if strategy != "":
                 if strategy == "page":
@@ -195,7 +194,6 @@ class MyRestDataSourceReader(DataSourceReader):
         :return: Generator yielding tuples of processed rows
         """
         params = {page_param: page_num}
-
         resp = session.get(url, headers={}, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
