@@ -8,7 +8,7 @@ from pyspark.sql.types import (
 )
 from typing import Iterator, List
 from api_ingestion.json_utils import JsonUtils
-
+import api_ingestion.constants as constants
 
 class MyRestDataSource(DataSource):
     """
@@ -61,11 +61,13 @@ class MyRestDataSource(DataSource):
         """
         url = f"{base_url}/{endpoint}".rstrip("/")
         params = {page_param: start_page} if pagination else {}
-
+        headers = {
+            "Accept": "application/json"
+        }
         with requests.Session() as session:
             if auth_token:
                 session.headers.update({"Authorization": auth_token})
-            resp = session.get(url, params=params, timeout=10)
+            resp = session.get(url, headers=headers, params=params, timeout=10)
             resp.raise_for_status()
             data = resp.json()
 
@@ -98,9 +100,11 @@ class MyRestDataSource(DataSource):
         """
         Spark calls this method to get a schema (StructType)
         for the DataFrame.
-
-        We perform a quick API call to infer the columns by examining the first JSON object.
+        Either we:
+        - perform a quick API call to infer the columns by examining the first JSON object.
         Each field is flattened and its type is inferred (if enabled) or set as a string.
+        else:
+        - load schema provided from config.json
         """
         if self.options.get("infer_schema"):
             fields = self.fetch_fields_from_api(
@@ -135,15 +139,20 @@ class MyRestDataSourceReader(DataSourceReader):
         Spark calls this on each partition.
         """
         #TODO HANDLE
-        start_page, end_page = partition.value
-
+        #start_page, end_page = partition.value
+        # url - related options
         base_url = self.options.get("base_url", "")
         endpoint = self.options.get("endpoint", "")
         url = f"{base_url}/{endpoint}".rstrip("/")
-
+        #auth - options
         auth_token = self.options.get("auth_token")
+        username = self.options.get("username")
+        password = self.options.get("password")
+        #parser - options
         json_path = self.options.get("json_path")
         page_param = self.options.get("page_param", "page")
+        pagination = self.options.get("pagination", "false").lower() == "true"
+        pagination_max_pages = self.options.get("max_pages",constants.MAX_PAGES)
 
         # Retrieve column names and their corresponding Spark types from the schema
         col_details = [(field.name, field.dataType) for field in self.schema.fields]
@@ -151,10 +160,26 @@ class MyRestDataSourceReader(DataSourceReader):
         with requests.Session() as session:
             if auth_token:
                 session.headers.update({"Authorization": auth_token})
-
-            for page_num in range(start_page, end_page + 1):
+            strategy = self.options.get("partitioning_strategy", "")
+            if strategy != "":
+                if strategy == "page":
+                    start_page, end_page = partition.value
+                    for page_num in range(start_page, end_page + 1):
+                        for row in self._fetch_page_data(session, url, page_num, page_param, json_path, col_details):
+                            yield row
+                if strategy == "param" and pagination:
+                    id_list = partition.value
+                    for param_id in id_list:
+                        for page_num in range(pagination_max_pages):
+                            for row in self._fetch_page_data(session, url, page_num, page_param, json_path,
+                                                             col_details):
+                                yield row
+            else:
                 for row in self._fetch_page_data(session, url, page_num, page_param, json_path, col_details):
                     yield row
+
+
+
 
     def _fetch_page_data(self,session, url, page_num, page_param, json_path, col_details):
         """
