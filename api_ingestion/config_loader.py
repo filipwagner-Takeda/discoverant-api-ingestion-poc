@@ -1,20 +1,8 @@
 import json
-from .app_context import AppContext, AuthConfig, HistoryLoadConfig, Endpoint
+from .app_context import AppContext, AuthConfig, Endpoint
 
 
 class ConfigValidator:
-    def validate_history_load(self, history_cfg: dict):
-        """Validate history load configuration block."""
-        enabled_value = self._to_bool(history_cfg.get("enabled"))
-
-        if enabled_value:
-            required_keys = ["start-date"]
-            invalid = [k for k in required_keys if not history_cfg.get(k)]
-            if invalid:
-                raise ValueError(
-                    f"Invalid configuration: history load enabled but missing fields: {invalid}"
-                )
-
     def _to_bool(self, value):
         """Convert various string representations to boolean."""
         if isinstance(value, bool):
@@ -27,6 +15,18 @@ class ConfigValidator:
                 return False
         raise ValueError(f"Invalid boolean value: {value!r}")
 
+    @staticmethod
+    def validate(config:dict) -> None:
+        required_values_for_keys = ['app-name', 'base-url', 'endpoint']
+        for key in required_values_for_keys:
+            if key not in config:
+                raise ValueError(f"Required key: {key} is missing")
+            if config[key] == "":
+                raise ValueError(f"Required key: {key} is empty/has no value")
+        values = config.values()
+
+        print(values)
+        pass
 
 class ConfigLoader:
     def __init__(self,path: str):
@@ -38,6 +38,7 @@ class ConfigLoader:
     def load_app_context(self) -> AppContext:
         with open(self.path, "r") as f:
             cfg = json.load(f)["ingest-souce-config"]
+        ConfigValidator.validate(cfg)
         endpoint = Endpoint(
                 endpoint_name=cfg.get("endpoint").get("endpoint-name"),
                 params=cfg.get("endpoint").get("params"),
@@ -46,7 +47,7 @@ class ConfigLoader:
         return AppContext(
             app_name=cfg.get("app-name"),
             url=cfg.get("base-url"),
-            history_load=HistoryLoadConfig(**cfg["history-load"]),
             endpoint=endpoint,
-            json_path=cfg.get("result").get("json_path")
+            json_path=cfg.get("result").get("json_path"),
+            schema_path=cfg.get("schema_path")
         )

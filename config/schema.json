@@ -1,0 +1,18 @@
+{
+  "fields": [
+    { "name": "id", "type": "long", "nullable": true },
+    { "name": "name", "type": "string", "nullable": true },
+    { "name": "status", "type": "string", "nullable": true },
+    { "name": "species", "type": "string", "nullable": true },
+    { "name": "type", "type": "string", "nullable": true },
+    { "name": "gender", "type": "string", "nullable": true },
+    { "name": "name", "type": "string", "nullable": true },
+    { "name": "url", "type": "string", "nullable": true },
+    { "name": "name", "type": "string", "nullable": true },
+    { "name": "url", "type": "string", "nullable": true },
+    { "name": "image", "type": "string", "nullable": true },
+    { "name": "episode", "type": "string", "nullable": true },
+    { "name": "url", "type": "string", "nullable": true },
+    { "name": "created", "type": "string", "nullable": true }
+  ]
+}
