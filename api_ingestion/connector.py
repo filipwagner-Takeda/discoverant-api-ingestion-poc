@@ -1,16 +1,10 @@
 import requests
-import json
-import datetime
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 import api_ingestion.api_utils as api_utils
 from pyspark.sql.types import (
     StructType,
     StructField,
     StringType,
-    LongType,
-    DoubleType,
-    BooleanType,
-    TimestampType,
 )
 from typing import Iterator, List
 from api_ingestion.json_utils import JsonUtils
@@ -37,7 +31,70 @@ class MyRestDataSource(DataSource):
         # Name used in spark.read.format("myrestdatasource")
         return "api-ingestion"
 
-    def schema(self):
+    from typing import List, Optional
+    from pyspark.sql.types import StructField, StringType
+    import requests
+
+    def fetch_fields_from_api(
+            self,
+            base_url: str,
+            endpoint: str,
+            auth_token: Optional[str] = None,
+            pagination: bool = False,
+            page_param: str = "page",
+            start_page: int = 1,
+            json_path: Optional[str] = None,
+            infer_types_flag: bool = False
+    ) -> List[StructField]:
+        """
+        Fetch JSON data from an API and return a list of Spark StructField objects.
+
+        :param base_url: Base URL of the API
+        :param endpoint: API endpoint
+        :param auth_token: Optional authorization token
+        :param pagination: Whether to include pagination params
+        :param page_param: Pagination parameter name
+        :param start_page: Starting page number
+        :param json_path: Optional JSON path to extract nested data
+        :param infer_types_flag: Whether to infer Spark types from values
+        :return: List of StructField objects
+        """
+        url = f"{base_url}/{endpoint}".rstrip("/")
+        params = {page_param: start_page} if pagination else {}
+
+        with requests.Session() as session:
+            if auth_token:
+                session.headers.update({"Authorization": auth_token})
+            resp = session.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+
+        # Apply json_path if present
+        if json_path:
+            data = JsonUtils.get_nested_value(data, json_path)
+
+        if data is None:
+            return []
+
+        # Normalize data to list of dicts
+        if isinstance(data, dict):
+            data = [data]
+        if not isinstance(data, list) or len(data) == 0:
+            return []
+
+        first_elem = data[0]
+        if not isinstance(first_elem, dict):
+            return []
+
+        # Flatten and infer fields
+        flattened = JsonUtils.flatten_json(first_elem)
+        fields = []
+        for key, value in flattened.items():
+            spark_type = JsonUtils.infer_spark_type(value) if infer_types_flag else StringType()
+            fields.append(StructField(key, spark_type, True))
+
+        return fields
+    def schema(self) -> StructType:
         """
         Spark calls this method to get a schema (StructType)
         for the DataFrame.
@@ -45,59 +102,22 @@ class MyRestDataSource(DataSource):
         We perform a quick API call to infer the columns by examining the first JSON object.
         Each field is flattened and its type is inferred (if enabled) or set as a string.
         """
-        base_url = self.options.get("base_url", "")
-        endpoint = self.options.get("endpoint", "")
-        url = f"{base_url}/{endpoint}".rstrip("/")
+        if self.options.get("infer_schema"):
+            fields = self.fetch_fields_from_api(
+                base_url=self.options.get("base_url", ""),
+                endpoint=self.options.get("endpoint", ""),
+                auth_token=self.options.get("auth_token"),
+                pagination=self.options.get("pagination", "false").lower() == "true",
+                page_param=self.options.get("page_param", "page"),
+                start_page=int(self.options.get("start_page", 1)),
+                json_path=self.options.get("json_path"),
+                infer_types_flag=self.options.get("infer_types", "false").lower() == "true"
+            )
+            return StructType(fields)
+        return JsonUtils.load_spark_schema_from_json(self.options.get("schema_path"))
 
-        auth_token = self.options.get("auth_token")
-        pagination = self.options.get("pagination", "false").lower() == "true"
-        page_param = self.options.get("page_param", "page")
-        start_page = int(self.options.get("start_page", 1))
-        infer_types_flag = self.options.get("infer_types", "false").lower() == "true"
 
-        params = {}
-        if pagination:
-            params[page_param] = start_page
-
-        # Use a requests.Session for improved performance and connection reuse
-        with requests.Session() as session:
-            if auth_token:
-                session.headers.update({"Authorization": auth_token})
-            # Set a timeout to avoid hanging indefinitely
-            resp = session.get(url, params=params, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-
-        # Apply json_path if present
-        json_path = self.options.get("json_path")
-        data = JsonUtils.get_nested_value(data, json_path)
-        if data is None:
-            # No data returns an empty schema
-            return StructType([])
-
-        # If the root is a single object, wrap it in a list
-        if isinstance(data, dict):
-            data = [data]
-        if not isinstance(data, list) or len(data) == 0:
-            return StructType([])
-
-        # Infer columns based on the first element
-        first_elem = data[0]
-        if not isinstance(first_elem, dict):
-            return StructType([])
-
-        flattened = JsonUtils.flatten_json(first_elem)
-        fields = []
-        for key, value in flattened.items():
-            if infer_types_flag:
-                spark_type = JsonUtils.infer_spark_type(value)
-            else:
-                spark_type = StringType()
-            fields.append(StructField(key, spark_type, True))
-
-        return StructType(fields)
-
-    def reader(self, schema):
+def reader(self, schema):
         """
         Creates and returns a DataSourceReader that uses the schema
         determined in the schema() method.
@@ -114,7 +134,9 @@ class MyRestDataSourceReader(DataSourceReader):
         """
         Spark calls this on each partition.
         """
+        #TODO HANDLE
         start_page, end_page = partition.value
+
         base_url = self.options.get("base_url", "")
         endpoint = self.options.get("endpoint", "")
         url = f"{base_url}/{endpoint}".rstrip("/")
@@ -144,7 +166,7 @@ class MyRestDataSourceReader(DataSourceReader):
         :param page_param: Name of the pagination parameter
         :param pagination: Boolean indicating if pagination is enabled
         :param json_path: Path to extract data from JSON response
-        :param col_details: List of (column_name, spark_type) tuples
+        :param col_details: List of (column_name, spark_type) - schema to fit onto df row
         :return: Generator yielding tuples of processed rows
         """
         params = {page_param: page_num}
@@ -178,16 +200,39 @@ class MyRestDataSourceReader(DataSourceReader):
         pagination enabled -> split pages to chunks
         :return: List of input partitions for executors
         """
-        # Return a single partition since this example handles one partition only.
-        base_url = self.options.get("base_url", "")
-        endpoint = self.options.get("endpoint", "")
-        url = f"{base_url}/{endpoint}".rstrip("/")
-        max_number = api_utils.find_valid_pages(url, 1, 50, page_param="page")
-        chunk_size = 10
-        partitions = []
-        for start in range(1, max_number + 1, chunk_size):
-            end = min(start + chunk_size - 1, max_number)
-            partitions.append(InputPartition((start, end)))
-
-        return partitions
+        #max_number = api_utils.find_valid_pages(url, 1, 50, page_param="page")
+        return self._partition_strategy()
         # return [InputPartition(0)]
+    def _page_partitioning(self) ->List[InputPartition]:
+        """
+        This method splits pages into chunks to be executed by executors
+        :return: List of input partitions for executors
+        """
+        max_pages = self.options.get("max_pages", 100)
+        chunk_size = self.options.get("chunk_size", 100)
+        partitions = []
+        for start in range(1, max_pages + 1, chunk_size):
+            end = min(start + chunk_size - 1, max_pages)
+            partitions.append(InputPartition((start, end)))
+        return partitions
+
+    def _chunk_list(self,input_list,chunk_size):
+        for i in range(0,len(input_list),chunk_size):
+            yield input_list[i:i+chunk_size]
+
+    def _param_partitioning(self) -> List[InputPartition]:
+        params = self.options.get("param_list", "")
+        chunk_size = self.options.get("chunk_size", 100)
+        params_split = params.split(",")
+        return [InputPartition(chunk) for chunk in self._chunk_list(params_split, chunk_size)]
+
+
+    def _partition_strategy(self):
+        strategy = self.options.get("partitioning_strategy", "")
+        match strategy:
+            case "page":
+                return self._page_partitioning()
+            case "param":
+                return self._param_partitioning()
+            case _:
+                return [InputPartition(0)]

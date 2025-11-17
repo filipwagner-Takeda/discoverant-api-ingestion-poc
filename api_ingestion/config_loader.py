@@ -48,5 +48,6 @@ class ConfigLoader:
             app_name=cfg.get("app-name"),
             url=cfg.get("base-url"),
             endpoint=endpoint,
-            json_path=cfg.get("result").get("json_path")
+            json_path=cfg.get("result").get("json_path"),
+            schema_path=cfg.get("schema_path")
         )

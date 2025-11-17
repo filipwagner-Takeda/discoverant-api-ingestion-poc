@@ -1,8 +1,8 @@
 import json
 import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from pyspark.sql.types import (
-    StructType,StructField, StringType, BooleanType, LongType, DoubleType, TimestampType, DataType
+    StructType, StructField, StringType, BooleanType, LongType, DoubleType, TimestampType, DataType, ArrayType
 )
 import json
 
@@ -124,12 +124,6 @@ class JsonUtils:
 
     @staticmethod
     def load_spark_schema_from_json(json_schema_path: str) -> StructType:
-        """
-        Loads a JSON schema file and converts it into a Spark StructType.
-
-        :param json_schema_path: Path to the JSON schema file
-        :return: Spark StructType
-        """
         with open(json_schema_path, "r") as f:
             schema_dict = json.load(f)
 

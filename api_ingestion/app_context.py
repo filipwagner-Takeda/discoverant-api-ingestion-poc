@@ -27,6 +27,7 @@ class AppContext:
     endpoint: Endpoint
     pages: Optional[Pagination] = None
     json_path: Optional[str] = None
+    schema_path: Optional[str] = None
 
 
 @dataclass

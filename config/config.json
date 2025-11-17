@@ -19,6 +19,7 @@
     "partition-strategy": "page",
     "result": {
       "json_path": "results"
-    }
+    },
+    "schema_path": "config/schema.json"
   }
 }

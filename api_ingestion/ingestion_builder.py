@@ -3,6 +3,7 @@ from typing import Any
 from pyspark.sql import DataFrame
 from api_ingestion.app_context import AppContext
 from api_ingestion.config_loader import ConfigLoader
+from api_ingestion.connector import MyRestDataSource
 
 class ApiIngestionBuilder:
     def __init__(self, spark: Any):
@@ -36,6 +37,7 @@ class ApiIngestion:
     def __init__(self, spark: Any, config_path: str):
         self.spark = spark
         config_loader = ConfigLoader(config_path)
+        self.spark.dataSource.register(MyRestDataSource)
         self.app_context = config_loader.load_app_context()
         self.builder_instance = None
 
