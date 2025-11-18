@@ -1,12 +1,11 @@
 {
-  "ingest-souce-config": {
+  "ingest-source-config": {
     "app-name": "RickAndMortyIngest",
     "base-url": "http://discoverant-dev.onetakeda.com:18080/discoverant-ws/agdata",
     "endpoint":
       {
         "endpoint-name": "agmanifest",
         "params": {
-
         },
         "headers": {
           "Accept": "application/json"
@@ -15,10 +14,8 @@
           "enabled": "true"
       }
       },
-    "partition-strategy": "page",
-    "result": {
-      "json_path": "results"
-    },
+    "partitioning_strategy": "page",
+    "json_path": "results",
     "schema_path": "config/schema.json"
   }
 }

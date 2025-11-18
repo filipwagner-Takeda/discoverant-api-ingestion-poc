@@ -19,7 +19,6 @@ class Endpoint:
     params: Optional[Dict] = field(default_factory=dict)
     headers: Optional[Dict[str, str]] = field(default_factory=dict)
 
-
 @dataclass
 class AppContext:
     app_name: str
@@ -28,7 +27,7 @@ class AppContext:
     pages: Optional[Pagination] = None
     json_path: Optional[str] = None
     schema_path: Optional[str] = None
-
+    partitioning_strategy: Optional[str] = None
 
 @dataclass
 class NotificationContext:
