@@ -15,6 +15,8 @@ from pyspark.sql.types import (
 
 class JsonUtils:
     """
+    Stateless class used in path probing of json API response and schema loading
+    Currently works well only for strict string column schema ingestion
     JSON helpers for:
       - flattening dicts to dotted keys
       - iterating deep JSON with a simplified path syntax (dot only)
@@ -89,9 +91,6 @@ class JsonUtils:
             else:
                 yield n
 
-    # ------------------------
-    # Simple helpers used by connector
-    # ------------------------
     @staticmethod
     def first_jsonpath(obj: Any, path: Optional[str]) -> Any:
         for n in JsonUtils.iter_jsonpath(obj, path):
