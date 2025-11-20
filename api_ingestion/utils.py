@@ -1,53 +1,39 @@
-import json
-import logging
-import boto3
 import requests
 
-PAYLOAD_TEMPLATE = {
-    "serviceLocation": "USA - Boston - Remote",
-    "impact": "2",
-    "urgency": "1",
-    "category": "Application/Software",
-    "subcategory": "Error/Issue",
-    "consumerName": "AWS Lambda"
-}
+class ApiUtils:
+    """
+    Stateless class to provide additional info from the API we ingest
+    """
+    @staticmethod
+    def find_valid_pages(base_url, start_page, end_page, page_param="page", headers=None, auth=None):
+        """
+        Recursively checks page ranges and returns pages that contain data.
+        Stops when a page returns 404 or empty data.
+        """
+        valid_pages = []
 
-SHORT_DESC = "{event_source_hr} failed {resource_name}"
-DESCRIPTION = (
-    "\n\nSpark API Connector has encountered a failure.\n"
-    "Error message: {error_message}"
-)
+        def check_range(s, e):
+            if s > e:
+                return
 
-class SecretsManager:
-    def __init__(self, region: str = 'us-east-1'):
-        self.client = boto3.client('secretsmanager', region_name=region)
+            params = {page_param: s}
+            resp = requests.get(base_url, params=params, headers=headers, auth=auth, timeout=10)
 
-    def get_secret(self, secret_name: str) -> dict:
-        response = self.client.get_secret_value(SecretId=secret_name)
-        return json.loads(response['SecretString'])
+            if resp.status_code == 404:
+                return
 
-class IncidentCreator:
-    def __init__(self, secret_name: str, region: str = 'us-east-1'):
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-        self.secret = SecretsManager(region).get_secret(secret_name)
+            data = resp.json()
+            if not data or len(data) == 0:
+                return
 
-    def generate_payload(self, event_source_hr: str, resource_name: str, error_message: str) -> dict:
-        payload = PAYLOAD_TEMPLATE.copy()
-        payload.update({
-            "shortDescription": SHORT_DESC.format(event_source_hr=event_source_hr, resource_name=resource_name),
-            "description": DESCRIPTION.format(error_message=error_message),
-            "requestedFor": resource_name
-        })
-        return payload
+            if s == e:
+                valid_pages.append(s)
+                return
+            # split in the middle first to check for smaller range recursively
+            # if max is 10 we go (1,5) and then the rest (6..10) until we get 404/no data
+            mid = (s + e) // 2
+            check_range(s, mid)
+            check_range(mid + 1, e)
 
-    def create_incident(self, url: str, event_source_hr: str, resource_name: str, error_message: str) -> str:
-        payload = self.generate_payload(event_source_hr, resource_name, error_message)
-        headers = {
-            "client_id": self.secret["client_id"],
-            "client_secret": self.secret["client_secret"],
-            "Content-Type": "application/json"
-        }
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
-        response.raise_for_status()
-        return response.json().get("IncidentNumber", "UNKNOWN")
+        check_range(start_page, end_page)
+        return max(valid_pages)

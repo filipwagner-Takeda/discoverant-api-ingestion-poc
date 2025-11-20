@@ -1,6 +1,6 @@
 {
   "fields": [
-    { "name": "id", "type": "long", "nullable": true },
+    { "name": "id", "type": "string", "nullable": true },
     { "name": "name", "type": "string", "nullable": true },
     { "name": "status", "type": "string", "nullable": true },
     { "name": "species", "type": "string", "nullable": true },
