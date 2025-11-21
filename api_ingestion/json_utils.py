@@ -24,9 +24,9 @@ class JsonUtils:
 
     Path behavior:
       - Use dot notation only: e.g. "aglist.valueList.valuesList.replId"(discoverant example)
-      - When a token meets a list, the iterator **implicitly expands** over elements
+      - When a token meets a list, the iterator implicitly expands over elements
         and continues matching the next token on each element.
-      - Final nodes that are lists are **expanded** (yield each element).
+      - Final nodes that are lists are expanded (yield each element).
     """
     @staticmethod
     def flatten_json(nested: Any, parent_key: str = "", sep: str = ".") -> Dict[str, Any]:
@@ -69,21 +69,17 @@ class JsonUtils:
                     if tok in n:
                         next_nodes.append(n[tok])
                 elif isinstance(n, list):
-                    # expand list, try to match token on each element
                     for el in n:
                         if isinstance(el, dict) and tok in el:
                             next_nodes.append(el[tok])
                         elif isinstance(el, list):
-                            # if nested list-of-lists, descend one level and try again
                             for sub in el:
                                 if isinstance(sub, dict) and tok in sub:
                                     next_nodes.append(sub[tok])
-                # non-dict/list nodes can't match a key, skip
             nodes = next_nodes
             if not nodes:
                 return
 
-        # At terminal step: if nodes are lists, yield each element; else yield nodes
         for n in nodes:
             if isinstance(n, list):
                 for el in n:

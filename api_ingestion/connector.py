@@ -1,7 +1,6 @@
 import logging
 import time
 from typing import Any, Dict, Iterator, List, Optional, Tuple
-import json
 import requests
 from requests.exceptions import RequestException
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
@@ -10,6 +9,14 @@ from pyspark.sql.types import StructType, StructField, StringType
 from api_ingestion.utils import ApiUtils
 from api_ingestion.json_utils import JsonUtils
 import api_ingestion.constants as constants
+
+
+def _normalize_key(name: str) -> str:
+    """
+    Lowercase and keep only [a-z0-9] to allow matching schema names like 'LocationName'
+    to flattened keys like 'location.name' -> both become 'locationname'.
+    """
+    return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
 class RestDataSource(DataSource):
@@ -215,9 +222,18 @@ class RestDataSourceReader(DataSourceReader):
                     if not isinstance(elem, dict):
                         elem = {"value": elem}
                     flat = JsonUtils.flatten_json(elem)
+                    norm_lookup = {_normalize_key(k): v for k, v in flat.items()}
+
                     row: List[object] = []
                     for col, spark_type in col_details:
+                        # 1) exact flattened key match
                         val = flat.get(col)
+                        if val is None:
+                            # 2) normalized-name match (e.g., LocationName -> location.name)
+                            val = norm_lookup.get(_normalize_key(col))
+                            if val is None:
+                                # 3) as a last resort, try interpreting the schema name as a json path
+                                val = JsonUtils.first_jsonpath(elem, col)
                         row.append(JsonUtils.convert_value_to_type(val, spark_type))
                     yield tuple(row)
                 return
