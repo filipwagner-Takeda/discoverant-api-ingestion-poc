@@ -28,6 +28,15 @@ class JsonUtils:
         and continues matching the next token on each element.
       - Final nodes that are lists are expanded (yield each element).
     """
+
+    @staticmethod
+    def normalize_key(name: str) -> str:
+        """
+        Lowercase and keep only [a-z0-9] to allow matching schema names like 'LocationName'
+        to flattened keys like 'location.name' -> both become 'locationname'.
+        """
+        return "".join(ch for ch in name.lower() if ch.isalnum())
+
     @staticmethod
     def flatten_json(nested: Any, parent_key: str = "", sep: str = ".") -> Dict[str, Any]:
         items: List[tuple[str, Any]] = []

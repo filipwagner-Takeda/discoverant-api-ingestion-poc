@@ -10,15 +10,6 @@ from api_ingestion.utils import ApiUtils
 from api_ingestion.json_utils import JsonUtils
 import api_ingestion.constants as constants
 
-
-def _normalize_key(name: str) -> str:
-    """
-    Lowercase and keep only [a-z0-9] to allow matching schema names like 'LocationName'
-    to flattened keys like 'location.name' -> both become 'locationname'.
-    """
-    return "".join(ch for ch in name.lower() if ch.isalnum())
-
-
 class RestDataSource(DataSource):
     """
     Spark Data Source V2 (Python) for generic REST APIs.
@@ -222,7 +213,7 @@ class RestDataSourceReader(DataSourceReader):
                     if not isinstance(elem, dict):
                         elem = {"value": elem}
                     flat = JsonUtils.flatten_json(elem)
-                    norm_lookup = {_normalize_key(k): v for k, v in flat.items()}
+                    norm_lookup = {JsonUtils.normalize_key(k): v for k, v in flat.items()}
 
                     row: List[object] = []
                     for col, spark_type in col_details:
@@ -230,7 +221,7 @@ class RestDataSourceReader(DataSourceReader):
                         val = flat.get(col)
                         if val is None:
                             # 2) normalized-name match (e.g., LocationName -> location.name)
-                            val = norm_lookup.get(_normalize_key(col))
+                            val = norm_lookup.get(JsonUtils.normalize_key(col))
                             if val is None:
                                 # 3) as a last resort, try interpreting the schema name as a json path
                                 val = JsonUtils.first_jsonpath(elem, col)
