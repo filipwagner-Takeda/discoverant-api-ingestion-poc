@@ -1,3 +1,4 @@
+#TODO cleanup later, some of these are not used/shouldn't be used
 USERNAME:str = ""
 PASSWORD: str = ""
 THROTTLE: float = 1
