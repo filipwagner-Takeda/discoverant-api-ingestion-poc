@@ -1,6 +1,7 @@
 import logging
 import time
 from typing import Any, Dict, Iterator, List, Optional, Tuple
+import json
 import requests
 from requests.exceptions import RequestException
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
@@ -9,6 +10,7 @@ from pyspark.sql.types import StructType, StructField, StringType
 from api_ingestion.utils import ApiUtils
 from api_ingestion.json_utils import JsonUtils
 import api_ingestion.constants as constants
+
 
 class RestDataSource(DataSource):
     """
@@ -212,20 +214,24 @@ class RestDataSourceReader(DataSourceReader):
                 for elem in row_nodes:
                     if not isinstance(elem, dict):
                         elem = {"value": elem}
+
                     flat = JsonUtils.flatten_json(elem)
-                    norm_lookup = {JsonUtils.normalize_key(k): v for k, v in flat.items()}
+
+                    value_list = list(flat.values())
+                    #left this commented for now, had bug with column insertion ordering
+                    #just a test implementation
+                    # sorted_items = sorted(flat.items(), key=lambda kv: kv[0])
+                    # value_list = [v for k, v in sorted_items]
 
                     row: List[object] = []
-                    for col, spark_type in col_details:
-                        # 1) exact flattened key match
-                        val = flat.get(col)
-                        if val is None:
-                            # 2) normalized-name match (e.g., LocationName -> location.name)
-                            val = norm_lookup.get(JsonUtils.normalize_key(col))
-                            if val is None:
-                                # 3) as a last resort, try interpreting the schema name as a json path
-                                val = JsonUtils.first_jsonpath(elem, col)
-                        row.append(JsonUtils.convert_value_to_type(val, spark_type))
+                    for idx, (col, spark_type) in enumerate(col_details):
+                        if idx < len(value_list):
+                            raw_val = value_list[idx]
+                        else:
+                            raw_val = None
+                        converted = JsonUtils.convert_value_to_type(raw_val, spark_type)
+                        row.append(converted)
+
                     yield tuple(row)
                 return
 
