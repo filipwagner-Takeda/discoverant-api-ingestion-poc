@@ -170,6 +170,7 @@ class RestDataSourceReader(DataSourceReader):
                         yield from self._fetch_page_data(session, self.url, page_num, col_details)
                 else:
                     yield from self._fetch_page_data(session, self.url, None, col_details)
+            logging.shutdown()
 
     def _fetch_page_data(
             self,
@@ -245,6 +246,7 @@ class RestDataSourceReader(DataSourceReader):
             except RequestException as e:
                 self.logger.error(f"Request error: {e}")
                 attempt += 1
+
 
     def partitions(self) -> List[InputPartition]:
         """
