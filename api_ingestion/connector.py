@@ -130,15 +130,13 @@ class RestDataSourceReader(DataSourceReader):
             self.max_pages = ApiUtils.find_valid_pages(self.url, 1, constants.MAX_PAGES, self.page_param)
         else:
             self.max_pages = 1
+        # Force driver logger initialization immediately
         try:
             self._ensure_logger()
-            print("INIT_LOGGER PATH (driver):", getattr(self, "log_file", None), flush=True)
-            try:
-                self.logger.info("Driver logger initialized in __init__")
-            except Exception as e:
-                raise Exception(e)
+            self.logger.info(f"Driver logger initialized early. Log file: {getattr(self, 'log_file', None)}")
         except Exception as e:
-            print("Logger init failed in __init__:", e, flush=True)
+            # fallback to stdout
+            logging.getLogger("api_ingestion_init").warning(f"Logger failed in __init__: {e}")
 
     def _ensure_logger(self):
         """
