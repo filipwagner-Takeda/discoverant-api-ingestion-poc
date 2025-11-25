@@ -107,10 +107,8 @@ class RestDataSourceReader(DataSourceReader):
         self.schema = schema
         self.options = options
         volume_path = self.options.get("volume_path", "").strip()
-        app_name = self.options.get("app_name", "").strip()
         if not volume_path:
             raise ValueError("Option 'volume_path' must be provided and cannot be empty for logging ")
-        self.logger,self.log_file = init_job_logger(volume_path,app_name)
         self.logger.info("Initializing Run")
         raw_params = self.options.get("params")
         self.params = JsonUtils.load_serialized_json(raw_params) if raw_params else {}
