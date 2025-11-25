@@ -110,6 +110,7 @@ class RestDataSourceReader(DataSourceReader):
         if not volume_path:
             raise ValueError("Option 'volume_path' must be provided and cannot be empty.")
         self.logger,self.log_file = init_job_logger(volume_path,"1","discoverant_api_ingestion")
+        self.logger.info("Initializing Run")
         raw_params = self.options.get("params")
         self.params = JsonUtils.load_serialized_json(raw_params) if raw_params else {}
 
@@ -132,6 +133,7 @@ class RestDataSourceReader(DataSourceReader):
             self.max_pages = ApiUtils.find_valid_pages(self.url, 1, constants.MAX_PAGES, self.page_param)
         else:
             self.max_pages = 1
+        self.logger.info("Run successfully initialized")
 
     def read(self, partition) -> Iterator[tuple]:
         col_details = [(field.name, field.dataType) for field in self.schema.fields]
