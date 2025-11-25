@@ -1,5 +1,6 @@
-import logging
+import sys
 import time
+import os, logging, socket
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 import requests
 from requests.exceptions import RequestException
@@ -9,7 +10,6 @@ from api_ingestion.job_logger import init_job_logger
 from api_ingestion.utils import ApiUtils
 from api_ingestion.json_utils import JsonUtils
 import api_ingestion.constants as constants
-
 
 class RestDataSource(DataSource):
     """
@@ -136,7 +136,40 @@ class RestDataSourceReader(DataSourceReader):
             self.max_pages = 1
         self.logger.info("Run successfully initialized")
 
+    def _ensure_logger(self):
+        """
+        Ensures each process (driver + executor) has its own DBFS FileHandler.
+        Called at the start of read() and _fetch_page_data().
+        """
+
+        # If logger already has a FileHandler, we are good.
+        if getattr(self, "logger", None) and any(
+                isinstance(h, logging.FileHandler) for h in self.logger.handlers
+        ):
+            return
+
+        # Create unique identity for this process
+        identity = (
+                os.environ.get("SPARK_EXECUTOR_ID")
+                or f"{os.environ.get('HOSTNAME') or socket.gethostname()}_{os.getpid()}"
+        )
+
+        volume_path = self.options.get("volume_path")
+        task_name = self.options.get("app_name", "api_ingestion")
+
+        try:
+            self.logger, self.log_file = init_job_logger(
+                volume_path, task_name, identity_suffix=identity
+            )
+        except Exception as e:
+            root = logging.getLogger("api_ingestion_fallback")
+            if not root.handlers:
+                root.addHandler(logging.StreamHandler(sys.stdout))
+            root.warning(f"Failed to init per-process logger: {e}")
+            self.logger = root
+
     def read(self, partition) -> Iterator[tuple]:
+        self._ensure_logger()
         col_details = [(field.name, field.dataType) for field in self.schema.fields]
 
         with requests.Session() as session:
@@ -170,11 +203,6 @@ class RestDataSourceReader(DataSourceReader):
                         yield from self._fetch_page_data(session, self.url, page_num, col_details)
                 else:
                     yield from self._fetch_page_data(session, self.url, None, col_details)
-            for handler in list(self.logger.handlers):
-                try:
-                    handler.flush()
-                except Exception as e:
-                    raise Exception(e)
 
     def _fetch_page_data(
             self,
@@ -184,7 +212,7 @@ class RestDataSourceReader(DataSourceReader):
             col_details: List[Tuple[str, object]],
             override_params: Optional[dict] = None,
     ) -> Iterator[tuple]:
-
+        self._ensure_logger()
         query_params = dict(self.params or {})
         if override_params:
             query_params.update(override_params)
@@ -275,3 +303,5 @@ class RestDataSourceReader(DataSourceReader):
     def _chunk_list(input_list: List[str], chunk_size: int) -> Iterator[List[str]]:
         for i in range(0, len(input_list), chunk_size):
             yield input_list[i: i + chunk_size]
+
+
