@@ -170,7 +170,11 @@ class RestDataSourceReader(DataSourceReader):
                         yield from self._fetch_page_data(session, self.url, page_num, col_details)
                 else:
                     yield from self._fetch_page_data(session, self.url, None, col_details)
-            logging.shutdown()
+            for handler in list(self.logger.handlers):
+                try:
+                    handler.flush()
+                except Exception as e:
+                    raise Exception(e)
 
     def _fetch_page_data(
             self,
