@@ -200,6 +200,8 @@ class RestDataSourceReader(DataSourceReader):
                     time.sleep(constants.THROTTLE)
 
                 resp = session.get(url, auth=self.auth, params=query_params, timeout=10)
+                self.logger.info(f"Reading page {page_num} with params {query_params}")
+
                 if resp.status_code != 200:
                     self.logger.error(f"HTTP {resp.status_code} for {url} params={query_params}: {resp.text}")
                     attempt += 1
