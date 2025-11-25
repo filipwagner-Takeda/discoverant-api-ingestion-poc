@@ -26,7 +26,7 @@ def init_job_logger(volume_path: str, task_name: str) -> tuple[
     os.makedirs(log_volume_path, exist_ok=True)
 
     # Log file path per notebook/task + run
-    today_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")[:-3]
+    today_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_file = os.path.join(log_volume_path, f"job_{today_str}_{task_name}.log")
 
     # Logger name
