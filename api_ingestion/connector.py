@@ -149,7 +149,6 @@ class RestDataSourceReader(DataSourceReader):
             if strategy == "page":
                 start_page, end_page = partition.value
                 for page_num in range(start_page, end_page + 1):
-                    self.logger.info(f"Reading page {page_num}")
                     yield from self._fetch_page_data(session, self.url, page_num, col_details)
 
             elif strategy == "param":
