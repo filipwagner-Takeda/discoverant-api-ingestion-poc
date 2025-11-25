@@ -109,7 +109,7 @@ class RestDataSourceReader(DataSourceReader):
         volume_path = self.options.get("volume_path", "").strip()
         if not volume_path:
             raise ValueError("Option 'volume_path' must be provided and cannot be empty for logging ")
-        self.logger.info("Initializing Run")
+        self.logger = None
         raw_params = self.options.get("params")
         self.params = JsonUtils.load_serialized_json(raw_params) if raw_params else {}
 
@@ -132,7 +132,6 @@ class RestDataSourceReader(DataSourceReader):
             self.max_pages = ApiUtils.find_valid_pages(self.url, 1, constants.MAX_PAGES, self.page_param)
         else:
             self.max_pages = 1
-        self.logger.info("Run successfully initialized")
 
     def _ensure_logger(self):
         """
@@ -284,6 +283,7 @@ class RestDataSourceReader(DataSourceReader):
         - page: if pagination is supported, use chunks of pages per executor to speed up ingestion,
         - param: if using many metadata values as parameters, split into partitions based on chunk settings and send partitions to executors
         """
+        self._ensure_logger()
         self.logger.info(f"Partitioning strategy {self.strategy}")
         if self.strategy == "page":
             parts: List[InputPartition] = []
