@@ -1,12 +1,11 @@
 import logging
 import time
 from typing import Any, Dict, Iterator, List, Optional, Tuple
-import json
 import requests
 from requests.exceptions import RequestException
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from pyspark.sql.types import StructType, StructField, StringType
-
+from api_ingestion.job_logger import init_job_logger
 from api_ingestion.utils import ApiUtils
 from api_ingestion.json_utils import JsonUtils
 import api_ingestion.constants as constants
@@ -107,7 +106,10 @@ class RestDataSourceReader(DataSourceReader):
     def __init__(self, schema: StructType, options: dict):
         self.schema = schema
         self.options = options
-
+        volume_path = self.options.get("volume_path", "").strip()
+        if not volume_path:
+            raise ValueError("Option 'volume_path' must be provided and cannot be empty.")
+        self.logger,self.log_file = init_job_logger(volume_path,"1","discoverant_api_ingestion")
         raw_params = self.options.get("params")
         self.params = JsonUtils.load_serialized_json(raw_params) if raw_params else {}
 
@@ -141,9 +143,11 @@ class RestDataSourceReader(DataSourceReader):
             session.headers.update(headers)
 
             strategy = self.strategy
+            self.logger.info(f"Partition strategy set to {strategy} ")
             if strategy == "page":
                 start_page, end_page = partition.value
                 for page_num in range(start_page, end_page + 1):
+                    self.logger.info(f"Reading page {page_num}")
                     yield from self._fetch_page_data(session, self.url, page_num, col_details)
 
             elif strategy == "param":
@@ -188,14 +192,14 @@ class RestDataSourceReader(DataSourceReader):
             try:
                 if attempt > 0:
                     sleep_time = constants.BACKOFF_FACTOR ** attempt
-                    logging.warning(f"Retrying in {sleep_time:.2f}s (attempt {attempt}/{constants.RETRIES})…")
+                    self.logger.warning(f"Retrying in {sleep_time:.2f}s (attempt {attempt}/{constants.RETRIES})…")
                     time.sleep(sleep_time)
                 else:
                     time.sleep(constants.THROTTLE)
 
                 resp = session.get(url, auth=self.auth, params=query_params, timeout=10)
                 if resp.status_code != 200:
-                    logging.error(f"HTTP {resp.status_code} for {url} params={query_params}: {resp.text}")
+                    self.logger.error(f"HTTP {resp.status_code} for {url} params={query_params}: {resp.text}")
                     attempt += 1
                     continue
 
@@ -207,7 +211,7 @@ class RestDataSourceReader(DataSourceReader):
                 if not row_nodes:
                     consecutive_empty += 1
                     if consecutive_empty >= 5:
-                        logging.info("Stopping after multiple empty payloads.")
+                        self.logger.info("Stopping after multiple empty payloads.")
                         return
                     return
 
@@ -236,7 +240,7 @@ class RestDataSourceReader(DataSourceReader):
                 return
 
             except RequestException as e:
-                logging.error(f"Request error: {e}")
+                self.logger.error(f"Request error: {e}")
                 attempt += 1
 
     def partitions(self) -> List[InputPartition]:
