@@ -145,7 +145,6 @@ class RestDataSourceReader(DataSourceReader):
             session.headers.update(headers)
 
             strategy = self.strategy
-            self.logger.info(f"Partition strategy set to {strategy} ")
             if strategy == "page":
                 start_page, end_page = partition.value
                 for page_num in range(start_page, end_page + 1):
@@ -251,6 +250,7 @@ class RestDataSourceReader(DataSourceReader):
         - page: if pagination is supported, use chunks of pages per executor to speed up ingestion,
         - param: if using many metadata values as parameters, split into partitions based on chunk settings and send partitions to executors
         """
+        self.logger.info(f"Partitioning strategy {self.partition_strategy}")
         if self.strategy == "page":
             parts: List[InputPartition] = []
             for start in range(1, self.max_pages + 1, self.chunk_size):
