@@ -109,7 +109,6 @@ class RestDataSourceReader(DataSourceReader):
         volume_path = self.options.get("volume_path", "").strip()
         if not volume_path:
             raise ValueError("Option 'volume_path' must be provided and cannot be empty for logging ")
-        self.logger = None
         raw_params = self.options.get("params")
         self.params = JsonUtils.load_serialized_json(raw_params) if raw_params else {}
 
@@ -127,11 +126,19 @@ class RestDataSourceReader(DataSourceReader):
         username = self.options.get("username")
         password = self.options.get("password")
         self.auth: Optional[Tuple[str, str]] = (username, password) if (username or password) else None
-
         if self.pagination:
             self.max_pages = ApiUtils.find_valid_pages(self.url, 1, constants.MAX_PAGES, self.page_param)
         else:
             self.max_pages = 1
+        try:
+            self._ensure_logger()
+            print("INIT_LOGGER PATH (driver):", getattr(self, "log_file", None), flush=True)
+            try:
+                self.logger.info("Driver logger initialized in __init__")
+            except Exception as e:
+                raise Exception(e)
+        except Exception as e:
+            print("Logger init failed in __init__:", e, flush=True)
 
     def _ensure_logger(self):
         """
