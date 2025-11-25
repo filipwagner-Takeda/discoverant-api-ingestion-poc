@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 
 
-def init_job_logger(volume_path: str, run_id: str, task_name: str) -> tuple[
+def init_job_logger(volume_path: str, task_name: str) -> tuple[
     logging.Logger, str]:
     """
     Initialize a per-task or per-notebook logger writing to Unity Catalog volume.
@@ -26,11 +26,11 @@ def init_job_logger(volume_path: str, run_id: str, task_name: str) -> tuple[
     os.makedirs(log_volume_path, exist_ok=True)
 
     # Log file path per notebook/task + run
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    log_file = os.path.join(log_volume_path, f"job_{today_str}_run_{run_id}__{task_name}.log")
+    today_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")[:-3]
+    log_file = os.path.join(log_volume_path, f"job_{today_str}_{task_name}.log")
 
     # Logger name
-    logger_name = f"logger_{task_name}_{run_id}"
+    logger_name = f"logger_{task_name}"
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.INFO)
 
@@ -47,5 +47,5 @@ def init_job_logger(volume_path: str, run_id: str, task_name: str) -> tuple[
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
-    logger.info(f"Logger initialized for task '{task_name}', run {run_id}")
+    logger.info(f"Logger initialized for task '{task_name}'")
     return logger, log_file
