@@ -106,9 +106,6 @@ class RestDataSourceReader(DataSourceReader):
     def __init__(self, schema: StructType, options: dict):
         self.schema = schema
         self.options = options
-        volume_path = self.options.get("volume_path", "").strip()
-        if not volume_path:
-            raise ValueError("Option 'volume_path' must be provided and cannot be empty for logging ")
         raw_params = self.options.get("params")
         self.params = JsonUtils.load_serialized_json(raw_params) if raw_params else {}
 
@@ -157,8 +154,13 @@ class RestDataSourceReader(DataSourceReader):
                 or f"{os.environ.get('HOSTNAME') or socket.gethostname()}_{os.getpid()}"
         )
 
-        volume_path = self.options.get("volume_path")
-        task_name = self.options.get("app_name", "api_ingestion")
+        volume_path = self.options.get("volume_path", "").strip()
+
+        if not volume_path:
+            raise ValueError("Option 'volume_path' must be provided and cannot be empty for logging purposes")
+        task_name = self.options.get("task_name")
+        if not task_name:
+            raise ValueError("Option 'task_name' must be provided and cannot be empty for logging purposes")
 
         try:
             self.logger, self.log_file = init_job_logger(
