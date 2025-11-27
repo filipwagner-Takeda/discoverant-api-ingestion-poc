@@ -142,6 +142,7 @@ class RestDataSourceReader(DataSourceReader):
         """
         Ensures each process (driver + executor) has its own DBFS FileHandler.
         Called at the start of read() and _fetch_page_data().
+        - Without this method executors don't log into volume
         """
 
         # If logger already has a FileHandler, we are good.

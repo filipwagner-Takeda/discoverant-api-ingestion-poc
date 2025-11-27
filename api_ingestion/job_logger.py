@@ -1,4 +1,3 @@
-# api_ingestion/job_logger.py
 import os
 import sys
 import logging
@@ -24,9 +23,10 @@ def init_job_logger(volume_path: str, task_name: str, identity_suffix: str | Non
             os.environ.get("SPARK_EXECUTOR_ID")
             or f"{socket.gethostname()}_{os.getpid()}"
         )
-
+    folder_name = f"job_{datetime.now().strftime('%Y-%m-%d_%H')}_{task_name}/"
     filename = f"job_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f')[:-3]}_{task_name}_{identity_suffix}.log"
-    log_file = os.path.join(local_volume, filename)
+    #create job-specific sub-folder for logs
+    log_file = os.path.join(local_volume,folder_name, filename)
 
     logger_name = f"api_ingestion.{task_name}.{identity_suffix}"
     logger = logging.getLogger(logger_name)
