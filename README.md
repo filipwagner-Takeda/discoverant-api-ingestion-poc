@@ -1,46 +1,81 @@
-# API Ingestion Spark Data Source
+# RestDataSource – High-Level Overview
 
-A modular **PySpark Data Source V2 connector** for ingesting data directly from REST APIs into Spark DataFrames.  
-This project provides robust JSON parsing, schema inference, and retry/pagination logic for large-scale API ingestion pipelines.
+`RestDataSource` is a Spark Data Source V2 implementation that provides a **standardized, unified, and reusable** way to ingest data from REST APIs across our organization.  
+Its purpose is to replace one-off ingestion scripts with a consistent framework that:
 
----
+- Handles common API interaction patterns  
+- Reduces duplicated logic  
+- Improves reliability and maintainability  
+- Enables scalable, production-ready ingestion pipelines
 
-## 📘 Overview
+## What It Does
 
-This library consists of two main components:
+### 1. Standardized API Ingestion
 
-### 1. **`JsonUtils`**
-A stateless utility module for working with JSON objects, designed to:
-- Flatten deeply nested JSON objects into dotted key-value pairs.
-- Traverse JSON data using simple dot-notation paths.
-- Load and infer Spark-compatible schemas from JSON definitions.
-- Safely convert arbitrary Python values to Spark SQL-compatible data types.
+The DataSource enables Spark to read data directly from REST API endpoints.  
+It abstracts the complexity of authentication, pagination, and request handling so users can ingest data by simply configuring options—no custom ingestion code required.
 
-### 2. **`RestDataSource`**
-A fully functional **Spark Data Source V2 implementation** for REST APIs.  
-It supports:
-- Schema inference from live API responses.
-- JSON path extraction (`json_path`) to target nested objects or arrays.
-- Paging and parameter-based partitioning strategies for scalable ingestion.
-- Configurable retry, throttling, and backoff for resilient API access.
+### 2. Automatic Schema Handling
+
+The system supports two approaches:
+
+- **Schema inference** — probing the API and generating a schema dynamically  
+- **Static schema loading** — using a predefined JSON schema file  
+
+This allows both rapid experimentation and stable production pipelines.
 
 
----
+### 3. Pagination & Partitioning
 
-## Features
+To efficiently ingest large volumes of API data, the reader supports:
 
-- **Automatic Schema Discovery**  
-  Probe REST endpoints and infer Spark `StructType` schemas directly from JSON payloads.
+- **Page-based pagination**  
+- **Parameter-based partitioning** (ID lists, metadata keys, etc.)  
+- **Non-paginated modes**
 
-- **Schema loading from files**  
-  Load JSON schema file and create Spark `StructType` schema.
+These strategies let Spark parallelize API requests and process data at scale.
 
-- **Pagination & Parameterized Fetching**  
-  Supports both `page`-based and `param`-based partitioning for distributed ingestion.
+### 4. Error Handling, Retries & Throttling
 
-- **Robust Retry Logic**  
-  Includes throttling and exponential backoff with configurable constants.
+To ensure resilience when interacting with external services, the ingestion pipeline includes:
 
-- **Dot-Path JSON Navigation**  
-  Access deeply nested data with simple path expressions like:
+- Automatic retries with **exponential backoff**  
+- **Throttling** to avoid hitting API rate limits  
+- Robust structured **logging of errors and responses**
 
+These mechanisms help ingestion succeed even when upstream APIs are slow or unstable.
+
+### 5. JSON Flattening & Transformation
+
+API responses frequently contain nested or irregular JSON. The DataSource includes utilities for:
+
+- Extracting nested values via **JSONPath**  
+- Flattening JSON into Spark-compatible tabular rows  
+- Handling flexible or inconsistent payload structures
+
+This ensures consistent DataFrame output across different API formats.
+
+
+
+### 6. Distributed Logging
+
+Each Spark driver and executor initializes its own log handler to provide:
+
+- Visibility into which executor processed which pages or parameters  
+- Simplified debugging of distributed API calls  
+- Standardized logs stored in a shared volume path  
+
+This is crucial when ingesting data at scale.
+
+## Why We Built It
+
+The goal of this initiative is to provide a **unified, standardized, and scalable** approach to REST API ingestion across the organization.  
+Instead of every team implementing their own logic, `RestDataSource` offers:
+
+- A **single reusable ingestion mechanism**  
+- Consistent configuration across all pipelines  
+- Built-in resilience, logging, and error recovery  
+- Easier long-term maintenance  
+- A pluggable architecture aligned with Spark best practices  
+
+By adopting this shared DataSource, we reduce duplicated engineering effort and ensure that all API-powered pipelines are reliable, scalable, and easier to support.
