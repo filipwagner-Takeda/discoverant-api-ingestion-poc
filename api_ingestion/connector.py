@@ -1,16 +1,15 @@
-import logging
+import sys
 import time
+import os, logging, socket
 from typing import Any, Dict, Iterator, List, Optional, Tuple
-import json
 import requests
 from requests.exceptions import RequestException
 from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
 from pyspark.sql.types import StructType, StructField, StringType
-
+from api_ingestion.job_logger import init_job_logger
 from api_ingestion.utils import ApiUtils
 from api_ingestion.json_utils import JsonUtils
 import api_ingestion.constants as constants
-
 
 class RestDataSource(DataSource):
     """
@@ -107,7 +106,9 @@ class RestDataSourceReader(DataSourceReader):
     def __init__(self, schema: StructType, options: dict):
         self.schema = schema
         self.options = options
-
+        volume_path = self.options.get("volume_path", "").strip()
+        if not volume_path:
+            raise ValueError("Option 'volume_path' must be provided and cannot be empty for logging ")
         raw_params = self.options.get("params")
         self.params = JsonUtils.load_serialized_json(raw_params) if raw_params else {}
 
@@ -125,13 +126,53 @@ class RestDataSourceReader(DataSourceReader):
         username = self.options.get("username")
         password = self.options.get("password")
         self.auth: Optional[Tuple[str, str]] = (username, password) if (username or password) else None
-
         if self.pagination:
             self.max_pages = ApiUtils.find_valid_pages(self.url, 1, constants.MAX_PAGES, self.page_param)
         else:
             self.max_pages = 1
+        # Force driver logger initialization immediately
+        try:
+            self._ensure_logger()
+            self.logger.info(f"Driver logger initialized early. Log file: {getattr(self, 'log_file', None)}")
+        except Exception as e:
+            # fallback to stdout
+            logging.getLogger("api_ingestion_init").warning(f"Logger failed in __init__: {e}")
+
+    def _ensure_logger(self):
+        """
+        Ensures each process (driver + executor) has its own DBFS FileHandler.
+        Called at the start of read() and _fetch_page_data().
+        - Without this method executors don't log into volume
+        """
+
+        # If logger already has a FileHandler, we are good.
+        if getattr(self, "logger", None) and any(
+                isinstance(h, logging.FileHandler) for h in self.logger.handlers
+        ):
+            return
+
+        # Create unique identity for this process
+        identity = (
+                os.environ.get("SPARK_EXECUTOR_ID")
+                or f"{os.environ.get('HOSTNAME') or socket.gethostname()}_{os.getpid()}"
+        )
+
+        volume_path = self.options.get("volume_path")
+        task_name = self.options.get("app_name", "api_ingestion")
+
+        try:
+            self.logger, self.log_file = init_job_logger(
+                volume_path, task_name, identity_suffix=identity
+            )
+        except Exception as e:
+            root = logging.getLogger("api_ingestion_fallback")
+            if not root.handlers:
+                root.addHandler(logging.StreamHandler(sys.stdout))
+            root.warning(f"Failed to init per-process logger: {e}")
+            self.logger = root
 
     def read(self, partition) -> Iterator[tuple]:
+        self._ensure_logger()
         col_details = [(field.name, field.dataType) for field in self.schema.fields]
 
         with requests.Session() as session:
@@ -174,7 +215,7 @@ class RestDataSourceReader(DataSourceReader):
             col_details: List[Tuple[str, object]],
             override_params: Optional[dict] = None,
     ) -> Iterator[tuple]:
-
+        self._ensure_logger()
         query_params = dict(self.params or {})
         if override_params:
             query_params.update(override_params)
@@ -188,14 +229,16 @@ class RestDataSourceReader(DataSourceReader):
             try:
                 if attempt > 0:
                     sleep_time = constants.BACKOFF_FACTOR ** attempt
-                    logging.warning(f"Retrying in {sleep_time:.2f}s (attempt {attempt}/{constants.RETRIES})…")
+                    self.logger.warning(f"Retrying in {sleep_time:.2f}s (attempt {attempt}/{constants.RETRIES})…")
                     time.sleep(sleep_time)
                 else:
                     time.sleep(constants.THROTTLE)
 
                 resp = session.get(url, auth=self.auth, params=query_params, timeout=10)
+                self.logger.info(f"Reading page {page_num} with params {query_params}")
+
                 if resp.status_code != 200:
-                    logging.error(f"HTTP {resp.status_code} for {url} params={query_params}: {resp.text}")
+                    self.logger.error(f"HTTP {resp.status_code} for {url} params={query_params}: {resp.text}")
                     attempt += 1
                     continue
 
@@ -207,7 +250,7 @@ class RestDataSourceReader(DataSourceReader):
                 if not row_nodes:
                     consecutive_empty += 1
                     if consecutive_empty >= 5:
-                        logging.info("Stopping after multiple empty payloads.")
+                        self.logger.info("Stopping after multiple empty payloads.")
                         return
                     return
 
@@ -236,8 +279,9 @@ class RestDataSourceReader(DataSourceReader):
                 return
 
             except RequestException as e:
-                logging.error(f"Request error: {e}")
+                self.logger.error(f"Request error: {e}")
                 attempt += 1
+
 
     def partitions(self) -> List[InputPartition]:
         """
@@ -245,6 +289,8 @@ class RestDataSourceReader(DataSourceReader):
         - page: if pagination is supported, use chunks of pages per executor to speed up ingestion,
         - param: if using many metadata values as parameters, split into partitions based on chunk settings and send partitions to executors
         """
+        self._ensure_logger()
+        self.logger.info(f"Partitioning strategy {self.strategy}")
         if self.strategy == "page":
             parts: List[InputPartition] = []
             for start in range(1, self.max_pages + 1, self.chunk_size):
@@ -261,3 +307,5 @@ class RestDataSourceReader(DataSourceReader):
     def _chunk_list(input_list: List[str], chunk_size: int) -> Iterator[List[str]]:
         for i in range(0, len(input_list), chunk_size):
             yield input_list[i: i + chunk_size]
+
+
