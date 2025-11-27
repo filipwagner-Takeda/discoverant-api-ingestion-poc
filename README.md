@@ -20,41 +20,33 @@ It abstracts the complexity of authentication, pagination, and request handling 
 The system supports two approaches:
 
 - **Schema inference** — probing the API and generating a schema dynamically  
-- **Static schema loading** — using a predefined JSON schema file  
-
-This allows both rapid experimentation and stable production pipelines.
-
+- **Static schema loading** — using a predefined JSON schema file
 
 ### 3. Pagination & Partitioning
 
-To efficiently ingest large volumes of API data, the reader supports:
+We have two defined partitioning strategies to distribute API requests across cluster. To efficiently ingest large volumes of API data, the reader supports:
 
 - **Page-based pagination**  
 - **Parameter-based partitioning** (ID lists, metadata keys, etc.)  
 - **Non-paginated modes**
 
-These strategies let Spark parallelize API requests and process data at scale.
-
 ### 4. Error Handling, Retries & Throttling
 
+Built-in mechanisms to help ingestion succeed even when upstream APIs are slow or unstable.
 To ensure resilience when interacting with external services, the ingestion pipeline includes:
 
 - Automatic retries with **exponential backoff**  
 - **Throttling** to avoid hitting API rate limits  
 - Robust structured **logging of errors and responses**
 
-These mechanisms help ingestion succeed even when upstream APIs are slow or unstable.
-
 ### 5. JSON Flattening & Transformation
 
+Helper methods that ensure consistent DataFrame output across different API formats.
 API responses frequently contain nested or irregular JSON. The DataSource includes utilities for:
 
 - Extracting nested values via **JSONPath**  
 - Flattening JSON into Spark-compatible tabular rows  
 - Handling flexible or inconsistent payload structures
-
-This ensures consistent DataFrame output across different API formats.
-
 
 
 ### 6. Distributed Logging
@@ -64,8 +56,6 @@ Each Spark driver and executor initializes its own log handler to provide:
 - Visibility into which executor processed which pages or parameters  
 - Simplified debugging of distributed API calls  
 - Standardized logs stored in a shared volume path  
-
-This is crucial when ingesting data at scale.
 
 ## Why We Built It
 
@@ -77,5 +67,3 @@ Instead of every team implementing their own logic, `RestDataSource` offers:
 - Built-in resilience, logging, and error recovery  
 - Easier long-term maintenance  
 - A pluggable architecture aligned with Spark best practices  
-
-By adopting this shared DataSource, we reduce duplicated engineering effort and ensure that all API-powered pipelines are reliable, scalable, and easier to support.
